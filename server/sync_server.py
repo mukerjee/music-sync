@@ -33,8 +33,7 @@ def read_from_control_sockets():
 def process_control_messages():
     for player in gPlayers:
         for cmd in player.get_cmds():
-            code = cmd[:4]
-            data = cmd[5:] if len(cmd) > 5 else ''
+            code, data = cmd
             run_cmd(code, player, data)
 
 

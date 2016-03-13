@@ -1,3 +1,9 @@
+import sys
+sys.path.append('../common/')
+
+from utils import parse_raw_cmds
+
+
 class Player():
     def __init__(self, control_socket, addr):
         self.control_socket = control_socket
@@ -16,6 +22,6 @@ class Player():
         self.input_audio = {}
 
     def get_cmds(self):
-        cmds = self.input_cmd_buffer.split('\n')
-        self.input_cmd_buffer = cmds[-1]
-        return cmds[:-1]
+        cmds, leftover = parse_raw_cmds(self.input_cmd_buffer)
+        self.input_cmd_buffer = leftover
+        return cmds
