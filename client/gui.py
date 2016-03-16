@@ -8,7 +8,10 @@ from kivy.clock import Clock
 
 from functools import partial
 
+input_mesg_queue = []
 output_mesg_queue = []
+
+chat_box = None
 
 Builder.load_string('''
 <ScrollableLabel>:
@@ -31,7 +34,7 @@ class SyncWindow(GridLayout):
 
         self.cols = 1
 
-        chat_box = ScrollableLabel(text='Welcome')
+        chat_box = ScrollableLabel(text='Welcome\n')
         self.add_widget(chat_box)
 
         textinput = TextInput(text='', multiline=False)
@@ -53,5 +56,13 @@ class MyApp(App):
         return SyncWindow()
 
 
+def update_chat_box(obj):
+    global chat_box
+    while len(input_mesg_queue) and chat_box:
+        mesg = input_mesg_queue.pop(0)
+        chat_box.text += mesg
+    
+
 def run():
+    Clock.schedule_interval(update_chat_box, 0.0002)
     MyApp().run()

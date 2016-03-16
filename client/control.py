@@ -1,57 +1,86 @@
 import wave
-from client_settings import gStartFlag, gAudioPackets, \
-    gInputSequenceNumber, gOutputSequenceNumber
+
+import network
+import audio
+import gui
+from player import Player
+
+import sys
+sys.path.append('../common/')
+
+from utils import parse_raw_data, mix, create_audio_packet, parse_raw_cmds, \
+    create_zeros, get_chunks
+from settings import FRAMES_PER_PACKET, FRAME_WIDTH, FRAME_RATE
+from client_settings import BACKING_FNs, BLOCK_SIZE, STARTUP_DELAY
+from cmds import run_cmd
+
+import globals
 
 scode = {'start': 'strt', 'player': 'plyr', 'instrument': 'inst'}
+local_cmds = ['volume']
 
-fns = ['./songs/lamprey/drums.wav', './songs/lamprey/bass.wav',
-       './songs/lamprey/piano.wav', './songs/lamprey/violin.wav']
-
-
-def parse_audio():
-    while len(network.input_audio_queue):
-        rawData, _ in network.input_audio_queue.pop(0)
-        seq, soundData = parse_raw_data(rawData)
-        if soundData:
-            gAudioPackets[seq].append(soundData)
+last_network_seq_num = -1
 
 
 def audio_mix():
-    global gOutputSequenceNumber
-    if gStartFlag:
-        end = gOutputSequenceNumber + BLOCK_SIZE / FRAMES_PER_PACKET
-        frames = ''
-        for i in xrange(gOutputSequenceNumber, end):
-            frames += mix(gAudioPackets[i].values())
-        gOutputSequenceNumber = end
-        audio.output_queue.append(frames)
+    if globals.StartFlag:
+        end = globals.OutputSequenceNumber + BLOCK_SIZE / FRAMES_PER_PACKET
+        data = []
+        volumes = []
+        for player in globals.Players:
+            d = ''
+            for i in xrange(globals.OutputSequenceNumber, end):
+                d += player.audio_packets[i]
+            data.append(d)
+            volumes.append(player.volume)
+
+        globals.OutputSequenceNumber = end
+        audio.output_queue.append(mix(data, volumes))
+
+
+def parse_audio_from_server():
+    global last_network_seq_num
+    while len(network.input_audio_queue):
+        rawData, _ = network.input_audio_queue.pop(0)
+        seq, soundData = parse_raw_data(rawData)
+        if seq > last_network_seq_num + 100:
+            continue
+        last_network_seq_num = seq
+        if soundData:
+            if globals.PlayerID > 1:
+                globals.previousPlayer.audio_packets[
+                    seq] = soundData
+                globals.MaxServerSeqNumber = \
+                    max(seq, globals.MaxServerSeqNumber)
+                if globals.MaxServerSeqNumber > STARTUP_DELAY * \
+                   FRAME_RATE / FRAMES_PER_PACKET:
+                    globals.StartFlag = True
 
 
 def send_audio_to_server():
-    global gInputSequenceNumber
     while len(audio.input_queue):
-        frames = audio.input_queue.pop(0)
-        packet = create_audio_packet(gInputSequenceNumber, frames)
+        seq_num, frames = audio.input_queue.pop(0)
+        packet = create_audio_packet(seq_num, frames)
         network.output_audio_queue.append(packet)
-        gInputSequenceNumber += 1
 
 
 def parse_user_cmd():
     while len(gui.output_mesg_queue):
         mesg = gui.output_mesg_queue.pop(0)
         if mesg[0] == '/':
-            i = mesg.find(' ')
-            if i != -1:
-                lcode = mesg[1:i]
-                data = mesg[i+1:]
+            mesg = mesg.split(' ')
+            lcode = mesg[0][1:]
+            data = ''.join(mesg[1:]) if len(mesg) > 1 else ''
+            if lcode in local_cmds:
+                run_cmd(lcode, data)
+            else:
                 code = scode[lcode] if lcode in scode else lcode
-                network.output_cmd_queue.append("%s %s \n" % (code, data))
+                network.output_cmd_queue.append("%s %s\n" % (code, data))
         else:
-            network.output_cmd_queue.append("mesg %s \n" % instance.text)
+            network.output_cmd_queue.append("mesg %s\n" % mesg)
 
 
-def run_cmd():
-    global network.input_cmd_buffer, gui.chat_box
+def process_cmds():
     if len(network.input_cmd_buffer):
         cmds, leftover = parse_raw_cmds(network.input_cmd_buffer)
         network.input_cmd_buffer = leftover
@@ -59,21 +88,24 @@ def run_cmd():
             run_cmd(code, data)
 
 
-def run():
+def run(obj):
     parse_user_cmd()
-    run_cmd()
-    parse_audio()
-    audio_mix()
+    process_cmds()
     send_audio_to_server()
+    parse_audio_from_server()
+    audio_mix()
     
 
 def init():
-    for i, fn in enumerate(fns):
+    for i, fn in enumerate(BACKING_FNs):
+        p = Player(i+1)
+        globals.Players.append(p)
         data_file = wave.open(fn, 'rb')
         data = data_file.readframes(data_file.getnframes())
         sequence_number = 0
-        for audio in chunks(data, FRAMES_PER_PACKET):
-            gAudioPackets[sequence_number][i] = audio
+        for d in get_chunks(data, FRAMES_PER_PACKET * FRAME_WIDTH):
+            #TODO: this implies you can't switch order of instruments
+            p.audio_packets[sequence_number] = d
             sequence_number += 1
     
     packet = create_audio_packet(-1, create_zeros(FRAMES_PER_PACKET))

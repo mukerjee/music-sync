@@ -4,14 +4,15 @@ from select import select
 from settings import NUM_CHANNELS, SAMPLE_WIDTH
 
 
+# returns (message, connection_closed)
 def read_until_block(s):
     mesg = ''
     while len(read_select(s)):
         m = s.recv(2048)
         if not len(m):  # client closed connection
-            return mesg
+            return (mesg, True)
         mesg += m
-    return mesg
+    return (mesg, False)
 
 
 def recv_from_until_block(s):
@@ -40,17 +41,17 @@ def parse_raw_data(rawData):
 
 
 # Yield successive n-sized chunks from l.
-def chunks(l, n):
+def get_chunks(l, n):
     for i in xrange(0, len(l), n):
         yield l[i:i+n]
 
         
 # takes in a list of equal length binary strings of sample data. mixes equally
-def mix(list_of_samples):
+def mix(list_of_samples, volumes):
     ls = list_of_samples
     for i in xrange(len(ls)):
         ls[i] = np.fromstring(ls[i], np.int16)
-        ls[i] = (1.0 / len(ls)) * ls[i].astype(np.float64)
+        ls[i] = volumes[i] * (1.0 / len(ls)) * ls[i].astype(np.float64)
         ls[i] = ls[i].astype(np.int16)
     return sum(ls).tostring()
 
@@ -67,7 +68,7 @@ def parse_raw_cmds(cmd_buffer):
     for raw_cmd in raw_cmds:
         code = raw_cmd[:4]
         data = raw_cmd[5:] if len(raw_cmd) > 5 else ''
-        cmds.append(code, data)
+        cmds.append((code, data))
     return cmds, leftover
 
 

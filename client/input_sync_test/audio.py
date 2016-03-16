@@ -1,7 +1,7 @@
 import pyaudio as pa
 
 import sys
-sys.path.append('../common/')
+sys.path.append('../../common/')
 
 from utils import create_zeros, get_chunks
 from settings import SAMPLE_WIDTH, NUM_CHANNELS, FRAME_RATE, \
@@ -19,6 +19,7 @@ output_start_time = 0
 
 def callback(in_data, frame_count, time_info, status):
     global output_start_time
+    seq_num = 0
     for i, frames in enumerate(get_chunks(in_data,
                                           FRAMES_PER_PACKET * FRAME_WIDTH)):
         if output_start_time == 0:
@@ -35,7 +36,8 @@ def callback(in_data, frame_count, time_info, status):
     if len(output_queue):
         if output_start_time == 0:
             output_start_time = time_info['output_buffer_dac_time']
-        out_data = output_queue.pop(0)
+        sample_gap = 1.0 / FRAME_RATE
+        osn, ose, out_data = output_queue.pop(0)
     return (out_data, pa.paContinue)
 
 
