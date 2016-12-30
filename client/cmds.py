@@ -64,6 +64,7 @@ def cmd_player(data):
             globals.myPlayer = Player(globals.PlayerID)
             globals.Players.append(globals.myPlayer)
 
+    for i, p in enumerate(globals.Players):
         if p.id == globals.PlayerID - 1:
             globals.Players.remove(p)
             globals.previousPlayer = Player(globals.PlayerID - 1)

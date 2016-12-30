@@ -27,7 +27,7 @@ def callback(in_data, frame_count, time_info, status):
         sample_gap = 1.0 / FRAME_RATE
         packet_time = time_info['input_buffer_adc_time'] + \
                       (i * sample_gap * FRAMES_PER_PACKET) - \
-                      output_start_time - stream.get_input_latency()
+                      output_start_time
         seq_num = int(packet_time / (FRAMES_PER_PACKET * sample_gap))
         if seq_num >= 0:
             input_queue.append((seq_num, frames))
