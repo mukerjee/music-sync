@@ -1,2 +1,2 @@
 # music-sync
-A framework for one-way music synchronization of live performances
+Framework for one-way music synchronization of live performances
